@@ -41,3 +41,22 @@ output "lambda_inference_function_arn" {
   description = "ARN de la función Lambda de inferencia."
   value       = aws_lambda_function.inference.arn
 }
+output "cloudwatch_lambda_log_group" {
+  description = "Grupo de logs de CloudWatch para la Lambda de inferencia."
+  value       = aws_cloudwatch_log_group.lambda_inference_logs.name
+}
+
+output "iot_thing_name" {
+  description = "Nombre del Thing IoT que representa al robot RAPIRO."
+  value       = aws_iot_thing.rapiro.name
+}
+
+output "iot_topic_rule_name" {
+  description = "Nombre de la regla IoT que invoca Lambda."
+  value       = aws_iot_topic_rule.rapiro_to_lambda.name
+}
+
+output "iot_mqtt_topic" {
+  description = "Topic MQTT usado para enviar eventos desde RAPIRO."
+  value       = "rapiro/lsa/keypoints"
+}
