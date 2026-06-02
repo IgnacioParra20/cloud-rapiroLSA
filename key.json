@@ -1,0 +1,8 @@
+{
+  "SessionId": {
+    "S": "test-session-001"
+  },
+  "Timestamp": {
+    "N": "1717350000"
+  }
+}

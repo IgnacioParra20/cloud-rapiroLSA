@@ -1,0 +1,17 @@
+{
+  "SessionId": {
+    "S": "test-session-001"
+  },
+  "Timestamp": {
+    "N": "1717350000"
+  },
+  "DetectedSign": {
+    "S": "Hola"
+  },
+  "Confidence": {
+    "N": "0.94"
+  },
+  "Source": {
+    "S": "RaspberryPi"
+  }
+}

@@ -32,3 +32,12 @@ output "lambda_inference_policy_arn" {
   description = "ARN de la política IAM adjunta al rol de inferencia."
   value       = aws_iam_policy.lambda_inference.arn
 }
+output "lambda_inference_function_name" {
+  description = "Nombre de la función Lambda de inferencia."
+  value       = aws_lambda_function.inference.function_name
+}
+
+output "lambda_inference_function_arn" {
+  description = "ARN de la función Lambda de inferencia."
+  value       = aws_lambda_function.inference.arn
+}
