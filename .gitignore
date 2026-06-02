@@ -9,7 +9,50 @@ crash.*.log
 
 # Terraform plan files
 *.tfplan
+tfplan
+
+# Terraform override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform lock file
+# Se recomienda subir .terraform.lock.hcl para mantener versiones consistentes del provider.
+# Por eso NO se ignora:
+# .terraform.lock.hcl
+
+# Lambda package
+lambda_function.zip
+*.zip
+
+# AWS CLI / test payloads and responses
+response.json
+response-*.json
+payload.json
+payload-*.json
+item.json
+key.json
+
+# Generated audio files
+*.mp3
+salida-rapiro.mp3
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+.venv/
+venv/
+env/
 
 # OS / editor
 .DS_Store
+Thumbs.db
 .vscode/
+.idea/
+
+# Logs
+*.log
