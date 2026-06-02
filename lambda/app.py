@@ -8,6 +8,11 @@ import boto3
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["DYNAMODB_TABLE"])
 
+polly = boto3.client("polly")
+s3 = boto3.client("s3")
+
+S3_BUCKET = os.environ["S3_BUCKET"]
+
 
 def handler(event, context):
     print("Evento recibido:", json.dumps(event))
@@ -18,25 +23,45 @@ def handler(event, context):
     source = event.get("Source", "AWS Lambda")
     timestamp = int(time.time())
 
+    text_to_speech = f"La seña detectada fue {detected_sign}."
+
     item = {
         "SessionId": session_id,
         "Timestamp": timestamp,
         "DetectedSign": detected_sign,
         "Confidence": confidence,
-        "Source": source
+        "Source": source,
+        "AudioText": text_to_speech
     }
 
     table.put_item(Item=item)
 
+    polly_response = polly.synthesize_speech(
+        Text=text_to_speech,
+        OutputFormat="mp3",
+        VoiceId="Lupe"
+    )
+
+    audio_key = f"audio/{session_id}-{timestamp}.mp3"
+
+    s3.put_object(
+        Bucket=S3_BUCKET,
+        Key=audio_key,
+        Body=polly_response["AudioStream"].read(),
+        ContentType="audio/mpeg"
+    )
+
     response = {
-        "message": "Registro guardado correctamente en DynamoDB",
+        "message": "Inferencia simulada guardada, audio generado con Polly y subido a S3",
         "item": {
             "SessionId": session_id,
             "Timestamp": timestamp,
             "DetectedSign": detected_sign,
             "Confidence": float(confidence),
-            "Source": source
-        }
+            "Source": source,
+            "AudioText": text_to_speech
+        },
+        "audio_s3_path": f"s3://{S3_BUCKET}/{audio_key}"
     }
 
     return {

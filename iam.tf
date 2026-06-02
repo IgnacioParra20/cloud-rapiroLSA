@@ -33,7 +33,8 @@ resource "aws_iam_policy" "lambda_inference" {
         Effect = "Allow"
         Action = [
           "s3:GetObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:PutObject"
         ]
         Resource = [
           aws_s3_bucket.model_artifacts.arn,
