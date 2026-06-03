@@ -224,7 +224,9 @@ cloudwatch.tf     → logs, métricas y alarma de CloudWatch
 iot.tf            → AWS IoT Thing, política y regla MQTT
 outputs.tf        → salidas importantes de Terraform
 lambda/app.py     → código Python de la Lambda
-lambda_function.zip → paquete ZIP desplegado en Lambda
+versions.tf       → versiones requeridas de Terraform y providers
+docs/workflow.md  → guía de workflow y validaciones recomendadas
+.github/workflows/terraform.yml → CI para formato, validación y sintaxis
 ```
 
 ---
@@ -480,16 +482,16 @@ El código de Lambda se encuentra en:
 lambda/app.py
 ```
 
-Cada vez que se modifica `app.py`, se debe volver a generar el ZIP:
+Terraform empaqueta automáticamente este archivo con el provider `archive` y genera el artefacto en `build/lambda_function.zip` durante el plan o apply. Si se desea generar el ZIP manualmente para una revisión local, se puede usar:
 
-```powershell
-Compress-Archive -Path .\lambda\app.py -DestinationPath .\lambda_function.zip -Force
+```bash
+./scripts/package_lambda.sh
 ```
 
 Luego se actualiza la Lambda con Terraform:
 
-```powershell
-terraform fmt
+```bash
+terraform fmt -recursive
 terraform validate
 terraform plan
 terraform apply
@@ -695,22 +697,17 @@ Debe aparecer el evento recibido desde IoT Core.
 
 ## Flujo de trabajo recomendado
 
-Cada vez que se modifique infraestructura Terraform:
+Cada vez que se modifique infraestructura Terraform o código de Lambda:
 
-```powershell
-terraform fmt
+```bash
+terraform fmt -recursive
 terraform validate
+python -m py_compile lambda/app.py iot_publish_test.py
 terraform plan
 terraform apply
 ```
 
-Cada vez que se modifique `lambda/app.py`:
-
-```powershell
-Compress-Archive -Path .\lambda\app.py -DestinationPath .\lambda_function.zip -Force
-terraform plan
-terraform apply
-```
+Además, el repositorio incluye GitHub Actions para repetir las comprobaciones principales en Pull Requests y pushes a `main`. Ver más detalles en [`docs/workflow.md`](docs/workflow.md).
 
 ---
 
@@ -723,3 +720,22 @@ Mensaje MQTT → IoT Core → Lambda → DynamoDB → Polly → S3 → CloudWatc
 ```
 
 Esto valida la base cloud del sistema y deja preparado el entorno para conectar la parte de visión por computadora, inteligencia artificial y RAPIRO.
+
+---
+
+## Workflow recomendado de desarrollo
+
+Para mejorar la calidad del repositorio y reducir errores antes de aplicar cambios en AWS, se agregó un workflow de CI en GitHub Actions y documentación operativa adicional.
+
+Comprobaciones recomendadas antes de abrir un Pull Request:
+
+```bash
+terraform fmt -recursive
+terraform validate
+python -m py_compile lambda/app.py iot_publish_test.py
+terraform plan -out=tfplan
+```
+
+La Lambda se empaqueta automáticamente desde `lambda/app.py` usando el provider `archive` de Terraform, por lo que ya no es necesario versionar ni crear manualmente `lambda_function.zip` para validar la infraestructura.
+
+Consulta la guía completa en [`docs/workflow.md`](docs/workflow.md).
