@@ -25,6 +25,8 @@ override.tf.json
 # Lambda package
 lambda_function.zip
 *.zip
+build/*
+!build/.gitkeep
 
 # AWS CLI / test payloads and responses
 response.json
