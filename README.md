@@ -1,741 +1,283 @@
 # cloud-rapiroLSA
 
-Infraestructura cloud del proyecto **RAPIRO-LSA**, implementada en **AWS** mediante **Terraform**.
+Infraestructura cloud del proyecto integrador **RAPIRO-LSA**, implementada en **AWS** con **Terraform**.
 
-Este repositorio contiene la definición de la infraestructura como código utilizada para desplegar la capa cloud del sistema. La arquitectura permite recibir eventos desde un dispositivo o simulador, procesarlos mediante AWS Lambda, registrar sesiones en DynamoDB, generar audio con Amazon Polly, almacenar archivos en S3, monitorear ejecuciones con CloudWatch y recibir mensajes mediante AWS IoT Core.
-
----
-
-## Estado actual del proyecto cloud
-
-Actualmente la demo cloud se encuentra funcional. Se implementaron y probaron los siguientes componentes:
-
-* Amazon S3 para almacenamiento de modelos, datasets, archivos de prueba y audios generados.
-* Amazon DynamoDB para registro del historial de sesiones e inferencias.
-* AWS IAM para roles y políticas de permisos de Lambda.
-* AWS Lambda como función principal de inferencia simulada.
-* Amazon Polly para convertir texto en audio.
-* Amazon CloudWatch para logs, métricas y monitoreo inicial.
-* AWS IoT Core para recibir mensajes MQTT y enviarlos automáticamente a Lambda.
-* Terraform como herramienta de Infraestructura como Código.
-* AWS CLI para pruebas manuales desde terminal.
-* GitHub como repositorio de versionado del código.
+El rediseño actual prioriza baja latencia: **RAPIRO/Python detecta la seña y reproduce la voz localmente de forma inmediata**. La nube ya no está en el camino crítico de la respuesta audible; se usa en segundo plano para registro, evidencia y monitoreo.
 
 ---
 
-## Arquitectura cloud implementada
-
-El flujo actual de la demo cloud es el siguiente:
+## Arquitectura principal actual: opción C
 
 ```text
-RAPIRO / Raspberry Pi / Simulador Python
+RAPIRO / Python local
         |
-        | MQTT topic: rapiro/lsa/keypoints
+        | 1. Detecta la seña localmente
+        | 2. Reproduce audio local inmediato
+        | 3. Envía POST HTTP en segundo plano
         v
-AWS IoT Core
+AWS Lambda Function URL
         |
-        | IoT Topic Rule
         v
-AWS Lambda
+AWS Lambda rapiro-lsa-inference
         |
-        ├── Registra evento en DynamoDB
-        ├── Genera audio con Amazon Polly
-        ├── Guarda MP3 en Amazon S3
-        └── Envía logs a CloudWatch
+        ├── Guarda evento en DynamoDB
+        ├── Guarda evidencia JSON en S3 bajo events/
+        └── Registra logs en CloudWatch
 ```
 
-El objetivo de esta arquitectura es dejar preparada la nube para recibir datos desde RAPIRO o desde una aplicación Python con MediaPipe, procesar una seña detectada y devolver una salida audible.
+Explicación para defensa:
+
+> RAPIRO realiza la detección de señas localmente mediante Python, MediaPipe y un modelo de IA. Para evitar latencia, la respuesta audible se reproduce localmente. En paralelo, el sistema envía el evento reconocido a AWS mediante una Lambda Function URL. La nube registra el evento en DynamoDB, guarda evidencia en S3 y permite monitoreo mediante CloudWatch. De esta manera, el robot responde rápido y el proyecto mantiene una infraestructura cloud real, simple y defendible.
 
 ---
 
-## Recursos creados en AWS
+## Cambios clave respecto al diseño anterior
 
-Los recursos principales creados hasta el momento son:
-
-### Amazon S3
-
-Bucket utilizado para almacenar modelos, datasets, archivos de prueba y audios generados por Polly.
-
-```text
-rapiro-lsa-models-datasets-295552411532
-```
-
-Uso esperado:
-
-```text
-models/      → modelos entrenados
-datasets/    → datasets del proyecto
-tests/       → archivos de prueba
-audio/       → audios MP3 generados por Polly
-```
+* **La detección se realiza localmente** en RAPIRO/Raspberry Pi/Python.
+* **La voz principal se reproduce localmente** para evitar lag.
+* **Lambda Function URL** es el nuevo endpoint HTTP principal para enviar eventos ya reconocidos.
+* **DynamoDB** guarda los eventos detectados.
+* **S3** guarda una copia JSON de cada evento bajo el prefijo `events/`.
+* **CloudWatch Logs** permite revisar trazabilidad, errores y evidencia operativa.
+* **Amazon Polly** queda como dependencia futura/opcional, pero la Lambda principal ya no lo usa para responder al robot.
+* **AWS IoT Core** se conserva como flujo legado/opcional, pero ya no es necesario para probar el flujo principal.
 
 ---
 
-### Amazon DynamoDB
+## Recursos principales
 
-Tabla utilizada para registrar sesiones, señas detectadas, niveles de confianza y marcas de tiempo.
+| Servicio | Recurso | Uso actual |
+| --- | --- | --- |
+| AWS Lambda | `rapiro-lsa-inference` | Ingesta HTTP liviana de eventos detectados. |
+| Lambda Function URL | output `lambda_function_url` | Endpoint principal para POST desde Python/PowerShell. |
+| DynamoDB | `rapiro-lsa-sessions` | Historial de eventos por `SessionId` y `Timestamp`. |
+| S3 | `rapiro-lsa-models-datasets-295552411532` | Modelos/datasets y evidencia JSON en `events/`. |
+| CloudWatch Logs | `/aws/lambda/rapiro-lsa-inference` | Logs de recepción, parseo y persistencia. |
+| AWS IoT Core | `rapiro-lsa-thing` y topic `rapiro/lsa/keypoints` | Entrada heredada/opcional. |
+| Amazon Polly | Permisos heredados | Uso opcional futuro, fuera del flujo principal. |
 
-```text
-rapiro-lsa-sessions
-```
+---
 
-Estructura de clave primaria:
+## Payload HTTP esperado
 
-```text
-SessionId  → Partition Key / String
-Timestamp  → Sort Key / Number
-```
-
-Ejemplo lógico de registro:
+La Lambda acepta POST JSON desde Lambda Function URL. Si faltan campos, usa valores por defecto razonables.
 
 ```json
 {
-  "SessionId": "iot-test-001",
-  "Timestamp": 1717350000,
+  "SessionId": "session-001",
   "DetectedSign": "Hola",
-  "Confidence": 0.98,
-  "Source": "AWS IoT Core",
-  "AudioText": "La seña detectada fue Hola."
+  "Confidence": 0.96,
+  "Source": "RAPIRO Local",
+  "DeviceId": "rapiro-lsa-thing",
+  "Mode": "word"
+}
+```
+
+Respuesta esperada:
+
+```json
+{
+  "message": "Evento recibido y registrado correctamente",
+  "event": {
+    "SessionId": "session-001",
+    "Timestamp": 1780000000,
+    "DetectedSign": "Hola",
+    "Confidence": 0.96,
+    "Source": "RAPIRO Local",
+    "DeviceId": "rapiro-lsa-thing",
+    "Mode": "word"
+  },
+  "s3_path": "s3://bucket/events/session-001-1780000000.json"
 }
 ```
 
 ---
 
-### AWS IAM
+## Seguridad simple del endpoint
 
-Rol creado para que Lambda pueda acceder a los servicios necesarios:
+La Function URL usa `authorization_type = "NONE"` para facilitar pruebas desde clientes simples, pero la Lambda valida un token enviado en el header HTTP `x-api-key`.
 
-```text
-rapiro-lsa-lambda-inference-role
-```
-
-Política asociada:
-
-```text
-rapiro-lsa-lambda-inference-policy
-```
-
-Permisos principales:
-
-```text
-s3:GetObject
-s3:PutObject
-s3:ListBucket
-dynamodb:PutItem
-dynamodb:GetItem
-dynamodb:Scan
-dynamodb:Query
-polly:SynthesizeSpeech
-logs:CreateLogGroup
-logs:CreateLogStream
-logs:PutLogEvents
-```
-
----
-
-### AWS Lambda
-
-Función principal de inferencia simulada:
-
-```text
-rapiro-lsa-inference
-```
-
-Responsabilidades actuales:
-
-* Recibir un evento JSON.
-* Leer datos como `SessionId`, `DetectedSign`, `Confidence` y `Source`.
-* Guardar el evento en DynamoDB.
-* Generar una frase de audio con Amazon Polly.
-* Guardar el archivo `.mp3` en S3.
-* Devolver la ruta del audio generado.
-* Registrar logs en CloudWatch.
-
----
-
-### Amazon Polly
-
-Servicio utilizado para convertir el texto detectado en audio.
-
-Ejemplo de frase generada:
-
-```text
-La seña detectada fue Hola.
-```
-
-El audio generado se almacena en S3 bajo el prefijo:
-
-```text
-audio/
-```
-
----
-
-### Amazon CloudWatch
-
-Servicio utilizado para monitoreo inicial de la Lambda.
-
-Se configuró un grupo de logs:
-
-```text
-/aws/lambda/rapiro-lsa-inference
-```
-
-También se agregó una métrica/filtro de errores y una alarma básica para detectar fallos en la Lambda.
-
----
-
-### AWS IoT Core
-
-Servicio utilizado para recibir mensajes MQTT desde RAPIRO, Raspberry Pi o un simulador Python.
-
-Thing creado:
-
-```text
-rapiro-lsa-thing
-```
-
-Topic MQTT utilizado:
-
-```text
-rapiro/lsa/keypoints
-```
-
-Regla IoT:
-
-```text
-rapiro_lsa_rapiro_to_lambda
-```
-
-La regla escucha mensajes publicados en el topic MQTT y ejecuta automáticamente la Lambda `rapiro-lsa-inference`.
+El token se configura mediante la variable sensible de Terraform `api_token` y se inyecta como variable de entorno `API_TOKEN` en Lambda. No hardcodees tokens en el repositorio.
 
 ---
 
 ## Archivos principales del proyecto
 
 ```text
-provider.tf       → configuración del proveedor AWS
-variables.tf      → variables del proyecto
-s3.tf             → definición del bucket S3
-dynamodb.tf       → definición de la tabla DynamoDB
-iam.tf            → rol y política IAM para Lambda
-lambda.tf         → función AWS Lambda
-cloudwatch.tf     → logs, métricas y alarma de CloudWatch
-iot.tf            → AWS IoT Thing, política y regla MQTT
-outputs.tf        → salidas importantes de Terraform
-lambda/app.py     → código Python de la Lambda
-versions.tf       → versiones requeridas de Terraform y providers
-docs/workflow.md  → guía de workflow y validaciones recomendadas
-.github/workflows/terraform.yml → CI para formato, validación y sintaxis
+provider.tf                 → proveedor AWS
+versions.tf                 → versiones requeridas de Terraform/providers
+variables.tf                → variables, incluido api_token sensible
+s3.tf                       → bucket S3
+dynamodb.tf                 → tabla DynamoDB
+iam.tf                      → rol y política IAM de Lambda
+lambda.tf                   → Lambda y Lambda Function URL
+cloudwatch.tf               → logs, métrica y alarma
+iot.tf                      → AWS IoT Core legado/opcional
+outputs.tf                  → outputs, incluido lambda_function_url
+lambda/app.py               → Lambda de ingesta HTTP
+scripts/post_event_test.py  → prueba HTTP desde Python local
+requirements.txt            → dependencia requests para el script de prueba
 ```
 
 ---
 
 ## Requisitos previos
 
-Antes de ejecutar Terraform, se necesita tener instalado y configurado:
-
 * Terraform CLI.
-* AWS CLI.
-* Visual Studio Code o editor equivalente.
-* Cuenta de AWS activa.
-* Credenciales AWS configuradas localmente.
-* Git para control de versiones.
+* AWS CLI configurado.
+* Python 3.
+* Credenciales AWS con permisos para gestionar los recursos del proyecto.
+* Variable `TF_VAR_api_token` configurada antes de `terraform plan` y `terraform apply`.
 
-Verificar instalación de Terraform:
+Verificar herramientas:
 
-```bash
+```powershell
 terraform -version
-```
-
-Verificar instalación de AWS CLI:
-
-```bash
 aws --version
-```
-
-Verificar identidad AWS:
-
-```bash
+python --version
 aws sts get-caller-identity
 ```
 
-La región utilizada por el proyecto es:
-
-```text
-us-east-2
-```
-
 ---
 
-## Inicializar Terraform
+## Comandos recomendados de despliegue
 
-Desde la raíz del proyecto:
+Desde la raíz del repositorio, en PowerShell:
 
-```bash
-terraform init
-```
+```powershell
+$env:TF_VAR_api_token="rapiro-demo-token-2026"
 
-Este comando descarga los proveedores necesarios, como el proveedor de AWS.
-
----
-
-## Validar configuración
-
-```bash
-terraform validate
-```
-
-Si la configuración es correcta, Terraform mostrará que los archivos son válidos.
-
----
-
-## Formatear archivos Terraform
-
-```bash
 terraform fmt
-```
-
-Este comando ordena y formatea los archivos `.tf`.
-
----
-
-## Revisar plan de cambios
-
-```bash
+terraform validate
 terraform plan
-```
-
-También se puede guardar el plan:
-
-```bash
-terraform plan -out=tfplan
-```
-
----
-
-## Aplicar infraestructura
-
-```bash
 terraform apply
+
+terraform output lambda_function_url
 ```
 
-Confirmar con:
+> Nota: no ejecutes `terraform apply` hasta revisar el plan. La variable `api_token` es sensible; para producción usa un token distinto al ejemplo.
 
-```text
-yes
-```
+---
 
-Si se usa un plan guardado:
+## Probar el endpoint con PowerShell
 
-```bash
-terraform apply tfplan
+Después de aplicar Terraform, copia el output `lambda_function_url` y ejecuta:
+
+```powershell
+$URL="PEGAR_LAMBDA_FUNCTION_URL"
+
+$payload = @{
+  SessionId = "http-test-001"
+  DetectedSign = "Hola"
+  Confidence = 0.98
+  Source = "PowerShell Test"
+  DeviceId = "rapiro-lsa-thing"
+  Mode = "word"
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri $URL `
+  -Method POST `
+  -Headers @{ "x-api-key" = "rapiro-demo-token-2026" } `
+  -ContentType "application/json" `
+  -Body $payload
 ```
 
 ---
 
-## Ver outputs
+## Probar el endpoint con Python
 
-```bash
-terraform output
+Instalar dependencias del script local:
+
+```powershell
+python -m pip install -r requirements.txt
 ```
 
-Outputs esperados:
+Configurar variables y enviar el evento:
 
-```text
-s3_bucket_name
-s3_bucket_arn
-dynamodb_table_name
-dynamodb_table_arn
-lambda_inference_role_name
-lambda_inference_role_arn
-lambda_inference_policy_arn
-lambda_inference_function_name
-lambda_inference_function_arn
-cloudwatch_lambda_log_group
-iot_thing_name
-iot_topic_rule_name
-iot_mqtt_topic
+```powershell
+$env:RAPIRO_LAMBDA_URL="PEGAR_LAMBDA_FUNCTION_URL"
+$env:RAPIRO_API_TOKEN="rapiro-demo-token-2026"
+python scripts/post_event_test.py
 ```
+
+El script imprime el status code y el cuerpo de respuesta devuelto por Lambda.
 
 ---
 
-## Ver recursos administrados por Terraform
+## Verificar evidencia en AWS
 
-```bash
-terraform state list
-```
-
----
-
-## Guardar outputs en variables de terminal
-
-En PowerShell:
-
-```powershell
-$BUCKET_NAME = terraform output -raw s3_bucket_name
-$TABLE_NAME = terraform output -raw dynamodb_table_name
-$ROLE_NAME = terraform output -raw lambda_inference_role_name
-```
-
-Mostrar valores:
-
-```powershell
-echo $BUCKET_NAME
-echo $TABLE_NAME
-echo $ROLE_NAME
-```
-
----
-
-## Probar S3
-
-Subir archivo de prueba:
-
-```powershell
-aws s3 cp .\prueba-rapiro.txt s3://rapiro-lsa-models-datasets-295552411532/tests/prueba-rapiro.txt --region us-east-2
-```
-
-Listar archivos:
-
-```powershell
-aws s3 ls s3://rapiro-lsa-models-datasets-295552411532/tests/ --region us-east-2
-```
-
-Listar todo el bucket:
-
-```powershell
-aws s3 ls s3://rapiro-lsa-models-datasets-295552411532 --recursive --region us-east-2
-```
-
----
-
-## Probar DynamoDB
-
-La tabla `rapiro-lsa-sessions` usa:
-
-```text
-SessionId → String
-Timestamp → Number
-```
-
-Ejemplo de `item.json`:
-
-```json
-{
-  "SessionId": {
-    "S": "test-session-001"
-  },
-  "Timestamp": {
-    "N": "1717350000"
-  },
-  "DetectedSign": {
-    "S": "Hola"
-  },
-  "Confidence": {
-    "N": "0.94"
-  },
-  "Source": {
-    "S": "VSCode"
-  }
-}
-```
-
-Insertar item:
-
-```powershell
-aws dynamodb put-item --table-name rapiro-lsa-sessions --region us-east-2 --item file://item.json
-```
-
-Ejemplo de `key.json`:
-
-```json
-{
-  "SessionId": {
-    "S": "test-session-001"
-  },
-  "Timestamp": {
-    "N": "1717350000"
-  }
-}
-```
-
-Consultar item:
-
-```powershell
-aws dynamodb get-item --table-name rapiro-lsa-sessions --region us-east-2 --key file://key.json
-```
-
-Ver todos los registros:
+### DynamoDB
 
 ```powershell
 aws dynamodb scan --table-name rapiro-lsa-sessions --region us-east-2
 ```
 
----
-
-## Empaquetar código Lambda
-
-El código de Lambda se encuentra en:
-
-```text
-lambda/app.py
-```
-
-Terraform empaqueta automáticamente este archivo con el provider `archive` y genera el artefacto en `build/lambda_function.zip` durante el plan o apply. Si se desea generar el ZIP manualmente para una revisión local, se puede usar:
-
-```bash
-./scripts/package_lambda.sh
-```
-
-Luego se actualiza la Lambda con Terraform:
-
-```bash
-terraform fmt -recursive
-terraform validate
-terraform plan
-terraform apply
-```
-
----
-
-## Probar Lambda desde AWS CLI
-
-Crear un archivo `payload-dynamodb.json`:
-
-```json
-{
-  "SessionId": "lambda-session-001",
-  "DetectedSign": "Hola",
-  "Confidence": 0.94,
-  "Source": "VSCode"
-}
-```
-
-Invocar Lambda:
-
-```powershell
-aws lambda invoke `
-  --function-name rapiro-lsa-inference `
-  --region us-east-2 `
-  --cli-binary-format raw-in-base64-out `
-  --payload file://payload-dynamodb.json `
-  response-dynamodb.json
-```
-
-Leer respuesta:
-
-```powershell
-Get-Content .\response-dynamodb.json
-```
-
----
-
-## Probar Amazon Polly desde AWS CLI
-
-Generar audio directamente desde Polly:
-
-```powershell
-aws polly synthesize-speech `
-  --region us-east-2 `
-  --output-format mp3 `
-  --voice-id Lupe `
-  --text "Hola, soy RAPIRO. La seña detectada fue hola." `
-  salida-rapiro.mp3
-```
-
-Si la voz `Lupe` no está disponible, probar:
-
-```powershell
-aws polly synthesize-speech `
-  --region us-east-2 `
-  --output-format mp3 `
-  --voice-id Miguel `
-  --text "Hola, soy RAPIRO LSA. Esta es una prueba de voz." `
-  salida-rapiro.mp3
-```
-
----
-
-## Probar Lambda + Polly + S3
-
-Crear un archivo `payload-polly.json`:
-
-```json
-{
-  "SessionId": "lambda-polly-001",
-  "DetectedSign": "Hola",
-  "Confidence": 0.96,
-  "Source": "VSCode"
-}
-```
-
-Invocar Lambda:
-
-```powershell
-aws lambda invoke `
-  --function-name rapiro-lsa-inference `
-  --region us-east-2 `
-  --cli-binary-format raw-in-base64-out `
-  --payload file://payload-polly.json `
-  response-polly.json
-```
-
-Leer respuesta:
-
-```powershell
-Get-Content .\response-polly.json
-```
-
-Verificar audio generado en S3:
-
-```powershell
-aws s3 ls s3://rapiro-lsa-models-datasets-295552411532/audio/ --region us-east-2
-```
-
----
-
-## Ver logs en CloudWatch
-
-Listar grupos de logs:
-
-```powershell
-aws logs describe-log-groups --region us-east-2
-```
-
-El grupo de logs esperado es:
-
-```text
-/aws/lambda/rapiro-lsa-inference
-```
-
-Ver desde consola:
-
-```text
-AWS Console > CloudWatch > Logs > Log groups > /aws/lambda/rapiro-lsa-inference
-```
-
-Ahí se pueden observar:
-
-```text
-START RequestId
-Evento recibido
-END RequestId
-REPORT RequestId
-Errores de ejecución
-Duración de la Lambda
-```
-
----
-
-## Probar AWS IoT Core desde consola
-
-Entrar a:
-
-```text
-AWS Console > IoT Core > MQTT test client
-```
-
-Publicar en el topic:
-
-```text
-rapiro/lsa/keypoints
-```
-
-Mensaje de prueba:
-
-```json
-{
-  "SessionId": "iot-final-test-001",
-  "DetectedSign": "Hola",
-  "Confidence": 0.98,
-  "Source": "AWS IoT Core"
-}
-```
-
-Presionar:
-
-```text
-Publish
-```
-
----
-
-## Verificar flujo completo IoT → Lambda → DynamoDB + Polly + S3
-
-Después de publicar el mensaje MQTT, verificar:
-
-### DynamoDB
-
-```text
-AWS Console > DynamoDB > Tables > rapiro-lsa-sessions > Explore table items
-```
-
-Buscar:
-
-```text
-SessionId = iot-final-test-001
-```
+Buscar registros con `SessionId = http-test-001`.
 
 ### S3
 
-```text
-AWS Console > S3 > rapiro-lsa-models-datasets-295552411532 > audio/
+```powershell
+aws s3 ls s3://rapiro-lsa-models-datasets-295552411532/events/ --region us-east-2
 ```
 
-Debe aparecer un archivo `.mp3` generado.
-
-### CloudWatch
+Debe aparecer un JSON con un nombre similar a:
 
 ```text
-AWS Console > CloudWatch > Logs > /aws/lambda/rapiro-lsa-inference
+events/http-test-001-1780000000.json
 ```
 
-Debe aparecer el evento recibido desde IoT Core.
+### CloudWatch Logs
+
+```powershell
+aws logs tail /aws/lambda/rapiro-lsa-inference --region us-east-2 --follow
+```
+
+Mensajes esperados:
+
+```text
+Evento recibido
+Payload parseado
+Evento guardado en DynamoDB
+Evento guardado en S3
+```
 
 ---
 
-## Flujo de trabajo recomendado
+## Flujo legado/opcional con AWS IoT Core
 
-Cada vez que se modifique infraestructura Terraform o código de Lambda:
+El proyecto conserva recursos de AWS IoT Core para no destruir infraestructura existente:
 
-```bash
-terraform fmt -recursive
-terraform validate
-python -m py_compile lambda/app.py iot_publish_test.py
-terraform plan
-terraform apply
+```text
+RAPIRO / Simulador MQTT → AWS IoT Core → Lambda
 ```
 
-Además, el repositorio incluye GitHub Actions para repetir las comprobaciones principales en Pull Requests y pushes a `main`. Ver más detalles en [`docs/workflow.md`](docs/workflow.md).
+Este flujo ya no es el principal para la demo de baja latencia. Para la defensa y pruebas rápidas se recomienda usar la **Lambda Function URL** con POST HTTP.
+
+Si `API_TOKEN` está configurado, las invocaciones directas que no incluyan header `x-api-key` serán rechazadas con HTTP 401. Esto protege el endpoint HTTP principal; si se desea reactivar IoT como flujo productivo, revisa cómo enviar o validar credenciales en ese camino legado.
+
+---
+
+## Validaciones locales antes de abrir PR o aplicar Terraform
+
+```powershell
+terraform fmt
+terraform validate
+python -m py_compile lambda/app.py
+python -m py_compile scripts/post_event_test.py
+terraform plan
+```
+
+No se debe ejecutar `terraform apply` automáticamente desde automatizaciones o agentes. Revisar primero el plan y confirmar manualmente.
 
 ---
 
 ## Resumen final
 
-La infraestructura cloud de RAPIRO-LSA ya permite demostrar un flujo completo:
+El repositorio deja preparada una arquitectura cloud simple y defendible:
 
 ```text
-Mensaje MQTT → IoT Core → Lambda → DynamoDB → Polly → S3 → CloudWatch
+Detección local + audio local inmediato → POST HTTP en segundo plano → Lambda Function URL → DynamoDB + S3 + CloudWatch
 ```
 
-Esto valida la base cloud del sistema y deja preparado el entorno para conectar la parte de visión por computadora, inteligencia artificial y RAPIRO.
-
----
-
-## Workflow recomendado de desarrollo
-
-Para mejorar la calidad del repositorio y reducir errores antes de aplicar cambios en AWS, se agregó un workflow de CI en GitHub Actions y documentación operativa adicional.
-
-Comprobaciones recomendadas antes de abrir un Pull Request:
-
-```bash
-terraform fmt -recursive
-terraform validate
-python -m py_compile lambda/app.py iot_publish_test.py
-terraform plan -out=tfplan
-```
-
-La Lambda se empaqueta automáticamente desde `lambda/app.py` usando el provider `archive` de Terraform, por lo que ya no es necesario versionar ni crear manualmente `lambda_function.zip` para validar la infraestructura.
-
-Consulta la guía completa en [`docs/workflow.md`](docs/workflow.md).
+Este diseño elimina a AWS del camino crítico de la voz en tiempo real, reduce latencia y mantiene evidencia cloud para monitoreo, auditoría y demostración del proyecto integrador.

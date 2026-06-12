@@ -60,3 +60,13 @@ Thumbs.db
 *.log
 
 security/
+
+# Local certificates and IoT credentials
+certs/
+*.pem
+*.crt
+*.key
+
+# Generic local test payloads/responses
+response*.json
+payload*.json

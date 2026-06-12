@@ -32,6 +32,7 @@ output "lambda_inference_policy_arn" {
   description = "ARN de la política IAM adjunta al rol de inferencia."
   value       = aws_iam_policy.lambda_inference.arn
 }
+
 output "lambda_inference_function_name" {
   description = "Nombre de la función Lambda de inferencia."
   value       = aws_lambda_function.inference.function_name
@@ -41,6 +42,7 @@ output "lambda_inference_function_arn" {
   description = "ARN de la función Lambda de inferencia."
   value       = aws_lambda_function.inference.arn
 }
+
 output "cloudwatch_lambda_log_group" {
   description = "Grupo de logs de CloudWatch para la Lambda de inferencia."
   value       = aws_cloudwatch_log_group.lambda_inference_logs.name
@@ -59,4 +61,9 @@ output "iot_topic_rule_name" {
 output "iot_mqtt_topic" {
   description = "Topic MQTT usado para enviar eventos desde RAPIRO."
   value       = "rapiro/lsa/keypoints"
+}
+
+output "lambda_function_url" {
+  description = "URL HTTP principal para registrar eventos detectados por RAPIRO"
+  value       = aws_lambda_function_url.rapiro_ingest_url.function_url
 }

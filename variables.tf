@@ -22,6 +22,12 @@ variable "lambda_function_name" {
   default     = "rapiro-lsa-inference"
 }
 
+variable "api_token" {
+  description = "Token simple para proteger la Lambda Function URL usada por RAPIRO/Python"
+  type        = string
+  sensitive   = true
+}
+
 locals {
   common_tags = {
     Project     = var.project_name
