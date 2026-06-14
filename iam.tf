@@ -1,6 +1,6 @@
 # Rol asumible únicamente por AWS Lambda para ejecutar la inferencia de IA.
 resource "aws_iam_role" "lambda_inference" {
-  name = "${var.project_name}-lambda-inference-role"
+  name = local.lambda_role_name
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17"
@@ -22,7 +22,7 @@ resource "aws_iam_role" "lambda_inference" {
 # - Invoca Amazon Polly para síntesis de voz.
 # - Escribe logs operativos en CloudWatch Logs para observabilidad básica.
 resource "aws_iam_policy" "lambda_inference" {
-  name        = "${var.project_name}-lambda-inference-policy"
+  name        = local.lambda_policy_name
   description = "Permisos mínimos para inferencia RAPIRO-LSA: S3 read, DynamoDB sessions, Polly y logs."
 
   policy = jsonencode({
@@ -50,6 +50,7 @@ resource "aws_iam_policy" "lambda_inference" {
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:Query",
+          "dynamodb:Scan",
           "dynamodb:UpdateItem"
         ]
         Resource = aws_dynamodb_table.sessions.arn
@@ -71,8 +72,8 @@ resource "aws_iam_policy" "lambda_inference" {
           "logs:PutLogEvents"
         ]
         Resource = [
-          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda_function_name}",
-          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:/aws/lambda/${var.lambda_function_name}:*"
+          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${local.cloudwatch_log_group_name}",
+          "arn:aws:logs:${var.aws_region}:${data.aws_caller_identity.current.account_id}:log-group:${local.cloudwatch_log_group_name}:*"
         ]
       }
     ]

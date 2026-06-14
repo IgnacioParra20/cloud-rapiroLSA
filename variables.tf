@@ -5,7 +5,7 @@ variable "project_name" {
 }
 
 variable "aws_region" {
-  description = "Región AWS donde se desplegará la infraestructura base."
+  description = "AWS region donde se desplegará la infraestructura"
   type        = string
   default     = "us-east-2"
 }
@@ -16,23 +16,14 @@ variable "environment" {
   default     = "dev"
 }
 
-variable "lambda_function_name" {
-  description = "Nombre esperado de la función Lambda de inferencia; se usa para limitar permisos de logs."
+variable "resource_suffix" {
+  description = "Sufijo opcional para diferenciar recursos por región o entorno"
   type        = string
-  default     = "rapiro-lsa-inference"
+  default     = ""
 }
 
 variable "api_token" {
   description = "Token simple para proteger la Lambda Function URL usada por RAPIRO/Python"
   type        = string
   sensitive   = true
-}
-
-locals {
-  common_tags = {
-    Project     = var.project_name
-    Environment = var.environment
-    ManagedBy   = "terraform"
-    Repository  = "cloud-rapiroLSA"
-  }
 }
