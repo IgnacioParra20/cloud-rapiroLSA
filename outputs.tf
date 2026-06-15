@@ -77,3 +77,18 @@ output "lambda_function_url" {
   description = "URL HTTP principal para registrar eventos detectados por RAPIRO"
   value       = aws_lambda_function_url.rapiro_ingest_url.function_url
 }
+
+output "ec2_backend_public_ip" {
+  description = "IP pública del backend EC2 principal. Null si enable_ec2_backend=false."
+  value       = var.enable_ec2_backend ? aws_instance.rapiro_backend[0].public_ip : null
+}
+
+output "ec2_backend_public_dns" {
+  description = "DNS público del backend EC2 principal. Null si enable_ec2_backend=false."
+  value       = var.enable_ec2_backend ? aws_instance.rapiro_backend[0].public_dns : null
+}
+
+output "ec2_backend_url" {
+  description = "URL base HTTP del backend EC2 FastAPI. Null si enable_ec2_backend=false."
+  value       = var.enable_ec2_backend ? "http://${aws_instance.rapiro_backend[0].public_dns}:8000" : null
+}

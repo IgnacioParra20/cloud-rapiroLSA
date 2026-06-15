@@ -27,3 +27,22 @@ variable "api_token" {
   type        = string
   sensitive   = true
 }
+
+
+variable "ec2_instance_type" {
+  description = "Tipo de instancia EC2 para backend RAPIRO-LSA"
+  type        = string
+  default     = "t3.micro"
+}
+
+variable "enable_ec2_backend" {
+  description = "Habilita backend EC2 para procesamiento continuo"
+  type        = bool
+  default     = true
+}
+
+variable "allowed_ssh_cidr" {
+  description = "CIDR permitido para SSH. Vacío para no abrir SSH."
+  type        = string
+  default     = ""
+}
