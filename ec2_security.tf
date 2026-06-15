@@ -1,7 +1,7 @@
 resource "aws_security_group" "ec2_backend" {
   count = var.enable_ec2_backend ? 1 : 0
 
-  name        = local.ec2_security_group_name
+  name        = local.ec2_security_group
   description = "Security Group para backend EC2 FastAPI RAPIRO-LSA"
 
   ingress {
@@ -21,7 +21,7 @@ resource "aws_security_group" "ec2_backend" {
   }
 
   tags = merge(local.common_tags, {
-    Name      = local.ec2_security_group_name
+    Name      = local.ec2_security_group
     Component = "ec2-backend"
   })
 }

@@ -87,7 +87,7 @@ resource "aws_iam_role_policy_attachment" "ec2_ssm_managed_instance_core" {
 resource "aws_iam_instance_profile" "ec2_backend" {
   count = var.enable_ec2_backend ? 1 : 0
 
-  name = local.ec2_instance_profile_name
+  name = local.ec2_profile_name
   role = aws_iam_role.ec2_backend[0].name
 
   tags = local.common_tags

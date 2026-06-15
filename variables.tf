@@ -23,11 +23,10 @@ variable "resource_suffix" {
 }
 
 variable "api_token" {
-  description = "Token simple para proteger la Lambda Function URL usada por RAPIRO/Python"
+  description = "Token simple para proteger el backend EC2 FastAPI usado por RAPIRO/Python"
   type        = string
   sensitive   = true
 }
-
 
 variable "ec2_instance_type" {
   description = "Tipo de instancia EC2 para backend RAPIRO-LSA"
