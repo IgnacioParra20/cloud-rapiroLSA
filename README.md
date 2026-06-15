@@ -1,55 +1,74 @@
 # cloud-rapiroLSA
 
-Infraestructura cloud del proyecto integrador **RAPIRO-LSA**, implementada en **AWS** con **Terraform** y preparada para comparar despliegues multi-región sin destruir el entorno existente.
+Infraestructura cloud del proyecto integrador **RAPIRO-LSA**, implementada en **AWS** con **Terraform**.
 
 ## Arquitectura principal actual
 
-El rediseño prioriza baja latencia: **RAPIRO/Python detecta la seña y reproduce la voz localmente**. AWS queda fuera del camino crítico de audio y registra evidencia en segundo plano.
+El flujo principal usa **EC2** para procesamiento continuo de frames porque RAPIRO/Raspberry no puede ejecutar MediaPipe localmente y Lambda no es adecuada para video continuo, procesos persistentes ni modelos cargados en memoria.
 
 ```text
-RAPIRO / Python local
-  -> detecta la seña localmente
-  -> reproduce voz local inmediata
-  -> envía POST HTTP en segundo plano
-  -> Lambda Function URL
-  -> Lambda guarda evento en DynamoDB
-  -> Lambda guarda evidencia JSON en S3/events/
-  -> CloudWatch registra logs y métricas
+RAPIRO / Raspberry / Python local
+  -> captura frames JPEG comprimidos
+  -> envía POST HTTP multipart/form-data a EC2 :8000/frame
+  -> EC2 / FastAPI decodifica JPEG con OpenCV
+  -> EC2 procesa mano con MediaPipe Hands
+  -> EC2 ejecuta predict_sign(keypoints) / modelo IA
+  -> EC2 devuelve texto reconocido, confianza y estabilidad
+  -> RAPIRO reproduce voz local inmediata
+  -> EC2 registra eventos estables en DynamoDB
+  -> EC2 guarda evidencia JSON en S3/events/
+  -> CloudWatch Agent envía logs básicos del backend
 ```
 
-**AWS IoT Core se conserva como flujo legado/opcional**, pero la entrada principal para pruebas y defensa es la **Lambda Function URL**.
+## Recursos principales
+
+| Componente | Uso |
+| --- | --- |
+| EC2 | Backend principal FastAPI para recibir frames y ejecutar OpenCV/MediaPipe/modelo. |
+| DynamoDB | Historial de eventos reconocidos por sesión. |
+| S3 | Evidencia JSON y artefactos/datasets/modelos del proyecto. |
+| IAM Instance Profile | Permisos de EC2 sin access keys. |
+| Security Group | Puerto `8000` para FastAPI; SSH cerrado salvo configuración explícita. |
+| CloudWatch Agent | Envío básico de logs de la app y bootstrap. |
 
 ## Recursos por región
 
-| Workspace | Región | Sufijo | Lambda | DynamoDB | S3 |
+| Workspace | Región | Sufijo | EC2 backend | DynamoDB | S3 |
 | --- | --- | --- | --- | --- | --- |
-| `default` | `us-east-2` | vacío | `rapiro-lsa-inference` | `rapiro-lsa-sessions` | `rapiro-lsa-models-datasets-<account_id>` |
-| `sa-east-1` | `sa-east-1` | `sae1` | `rapiro-lsa-inference-sae1` | `rapiro-lsa-sessions-sae1` | `rapiro-lsa-models-datasets-<account_id>-sae1` |
+| `default` | `us-east-2` | vacío | `rapiro-lsa-ec2-backend` | `rapiro-lsa-sessions` | `rapiro-lsa-models-datasets-<account_id>` |
+| `sa-east-1` | `sa-east-1` | `sae1` | `rapiro-lsa-ec2-backend-sae1` | `rapiro-lsa-sessions-sae1` | `rapiro-lsa-models-datasets-<account_id>-sae1` |
 
-Los nombres se centralizan en `locals.tf`. El bucket S3 incluye el ID de cuenta y el sufijo regional para evitar conflictos globales de S3.
+La región recomendada para Argentina es **São Paulo (`sa-east-1`)** con sufijo `sae1`.
 
 ## Seguridad del endpoint
 
-La Function URL usa `authorization_type = "NONE"` para permitir clientes simples, pero la Lambda valida el header `x-api-key` contra la variable sensible `api_token`. No guardes tokens reales en archivos versionados ni en `*.tfvars` committeados.
+El backend EC2 valida el header `x-api-key` contra la variable sensible `api_token`. No guardes tokens reales en archivos versionados ni en `*.tfvars` committeados.
 
-## Desplegar/probar Ohio sin cambiar la infraestructura actual
+La instancia EC2 usa IAM Instance Profile para acceder a DynamoDB, S3, CloudWatch y SSM. No se usan access keys dentro de EC2.
 
-Desde PowerShell, en la raíz del repo:
+## Backend FastAPI
 
-```powershell
-terraform workspace select default
-$env:TF_VAR_aws_region="us-east-2"
-$env:TF_VAR_resource_suffix=""
-$env:TF_VAR_api_token="rapiro-demo-token-2026"
+La app vive en `ec2_app/` y expone:
 
-terraform fmt
-terraform validate
-terraform plan
+* `GET /health`: estado básico del servicio.
+* `POST /event`: registra manualmente un evento ya reconocido, útil para pruebas sin cámara.
+* `POST /frame`: recibe `SessionId`, `DeviceId`, `Mode` y archivo JPEG `frame` vía `multipart/form-data`.
+
+Ejemplo de respuesta de `/frame`:
+
+```json
+{
+  "SessionId": "session-001",
+  "DetectedSign": "Hola",
+  "Confidence": 0.9,
+  "Stable": true,
+  "Message": "Seña reconocida correctamente"
+}
 ```
 
-Revisá que el plan mantenga nombres sin sufijo: `rapiro-lsa-inference`, `rapiro-lsa-sessions`, `rapiro-lsa-models-datasets-<account_id>` y `/aws/lambda/rapiro-lsa-inference`.
+## Desplegar EC2 en São Paulo
 
-## Crear/probar São Paulo en un workspace separado
+Desde PowerShell, en la raíz del repo:
 
 ```powershell
 terraform workspace new sa-east-1
@@ -59,82 +78,63 @@ terraform workspace select sa-east-1
 $env:TF_VAR_aws_region="sa-east-1"
 $env:TF_VAR_resource_suffix="sae1"
 $env:TF_VAR_api_token="rapiro-demo-token-2026"
+$env:TF_VAR_enable_ec2_backend="true"
+$env:TF_VAR_ec2_instance_type="t3.micro"
+# SSH queda cerrado por defecto. Preferir AWS Systems Manager Session Manager.
+$env:TF_VAR_allowed_ssh_cidr=""
 
 terraform fmt
 terraform validate
 terraform plan
 ```
 
-Ejecutá `terraform apply` **solo manualmente** y solo si el plan muestra recursos nuevos con sufijo `-sae1` y no intenta tocar ni destruir Ohio.
+Ejecutá `terraform apply` **solo manualmente** después de revisar que el plan no destruya recursos existentes.
 
-## Qué revisar en el `terraform plan` de São Paulo
+## Probar el backend EC2
 
-* Lambda: `rapiro-lsa-inference-sae1`.
-* DynamoDB: `rapiro-lsa-sessions-sae1`.
-* S3: `rapiro-lsa-models-datasets-<account_id>-sae1`; nunca `rapiro-lsa-models-datasets-<account_id>` sin sufijo.
-* IAM role/policy: `rapiro-lsa-lambda-inference-role-sae1` y `rapiro-lsa-lambda-inference-policy-sae1`.
-* CloudWatch Logs: `/aws/lambda/rapiro-lsa-inference-sae1`.
-* IoT Thing/Policy/Rule con sufijo `sae1` si se mantienen.
-* Cero acciones `destroy` sobre el workspace `default`/Ohio.
-
-## Prueba de latencia con PowerShell
-
-Después de aplicar manualmente el workspace que quieras medir:
+Después de aplicar manualmente:
 
 ```powershell
-$URL = terraform output -raw lambda_function_url
-
-$payload = @{
-  SessionId = "saopaulo-test-001"
-  DetectedSign = "Hola"
-  Confidence = 0.98
-  Source = "PowerShell Sao Paulo Test"
-  DeviceId = "rapiro-lsa-thing-sae1"
-  Mode = "word"
-} | ConvertTo-Json
-
-$sw = [System.Diagnostics.Stopwatch]::StartNew()
-
-$response = Invoke-RestMethod `
-  -Uri $URL `
-  -Method POST `
-  -Headers @{ "x-api-key" = "rapiro-demo-token-2026" } `
-  -ContentType "application/json" `
-  -Body $payload
-
-$sw.Stop()
-
-$response
-"Tiempo total HTTP: $($sw.ElapsedMilliseconds) ms"
-```
-
-## Prueba con Python
-
-```powershell
-python -m pip install -r requirements.txt
-$env:RAPIRO_LAMBDA_URL=(terraform output -raw lambda_function_url)
+$env:RAPIRO_EC2_BACKEND_URL=(terraform output -raw ec2_backend_url)
 $env:RAPIRO_API_TOKEN="rapiro-demo-token-2026"
-python scripts/post_event_test.py
+python scripts/test_ec2_backend.py
 ```
 
-El script solo depende de `RAPIRO_LAMBDA_URL` y `RAPIRO_API_TOKEN`, por lo que sirve para Ohio o São Paulo cambiando esas variables.
-
-## Verificación de evidencia
-
-Para Ohio:
+Para probar `/frame` con una imagen JPEG local:
 
 ```powershell
-aws dynamodb scan --table-name rapiro-lsa-sessions --region us-east-2
-aws s3 ls s3://rapiro-lsa-models-datasets-<account_id>/events/ --region us-east-2
-aws logs tail /aws/lambda/rapiro-lsa-inference --region us-east-2 --follow
+python scripts/test_ec2_backend.py .\frame-test.jpg
 ```
 
-Para São Paulo:
+Health directo:
+
+```powershell
+Invoke-RestMethod -Uri "$env:RAPIRO_EC2_BACKEND_URL/health" -Method GET
+```
+
+## Revisar evidencia y logs
 
 ```powershell
 aws dynamodb scan --table-name rapiro-lsa-sessions-sae1 --region sa-east-1
 aws s3 ls s3://rapiro-lsa-models-datasets-<account_id>-sae1/events/ --region sa-east-1
-aws logs tail /aws/lambda/rapiro-lsa-inference-sae1 --region sa-east-1 --follow
+aws ssm start-session --target <instance-id> --region sa-east-1
+sudo journalctl -u rapiro-lsa-backend.service -f
+```
+
+El CloudWatch Agent envía `/var/log/rapiro-lsa-backend.log` y `/var/log/rapiro-lsa-user-data.log` al log group `/rapiro-lsa/ec2-backend/<region>`.
+
+## Costos y apagado
+
+> **Importante:** EC2 queda encendido. Si no se está usando la demo, detener o destruir la instancia EC2 para evitar costos.
+
+Opciones:
+
+```powershell
+# detener sin destruir datos del root volume
+aws ec2 stop-instances --instance-ids <instance-id> --region sa-east-1
+
+# destruir los recursos administrados por Terraform del workspace actual
+terraform destroy
 ```
 
 ## Validaciones locales antes de aplicar
@@ -142,8 +142,8 @@ aws logs tail /aws/lambda/rapiro-lsa-inference-sae1 --region sa-east-1 --follow
 ```powershell
 terraform fmt
 terraform validate
-python -m py_compile lambda/app.py
-python -m py_compile scripts/post_event_test.py
+python -m py_compile ec2_app/main.py
+python -m py_compile scripts/test_ec2_backend.py
 terraform plan
 ```
 
@@ -151,4 +151,4 @@ No ejecutes `terraform apply` automáticamente. Primero verificá región, works
 
 ## Explicación para defensa
 
-> El sistema fue rediseñado para reducir latencia. RAPIRO detecta y habla localmente, mientras AWS registra eventos en segundo plano. Además, se preparó la infraestructura para desplegarse en múltiples regiones. Se mantiene Ohio como entorno existente y se crea una copia en São Paulo con nombres diferenciados para comparar tiempos reales desde Argentina. La selección final de región se hace midiendo la Lambda Function URL de cada región.
+> Se rediseñó el sistema cloud para quitar Lambda del procesamiento principal y eliminar componentes que ya no se usan. RAPIRO envía frames al backend EC2 en São Paulo, donde corre Python con FastAPI, OpenCV, MediaPipe y el modelo de reconocimiento. EC2 devuelve la seña reconocida para que RAPIRO hable localmente, y registra el evento en DynamoDB y S3 usando IAM Instance Profile, sin access keys.
