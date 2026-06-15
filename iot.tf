@@ -1,5 +1,5 @@
 resource "aws_iot_thing" "rapiro" {
-  name = "${var.project_name}-thing"
+  name = local.iot_thing_name
 
   attributes = {
     Project     = var.project_name
@@ -9,7 +9,7 @@ resource "aws_iot_thing" "rapiro" {
 }
 
 resource "aws_iot_topic_rule" "rapiro_to_lambda" {
-  name        = replace("${var.project_name}_rapiro_to_lambda", "-", "_")
+  name        = local.iot_rule_name
   description = "Regla IoT que envía mensajes MQTT de RAPIRO hacia Lambda."
   enabled     = true
   sql_version = "2016-03-23"
@@ -20,10 +20,7 @@ resource "aws_iot_topic_rule" "rapiro_to_lambda" {
     function_arn = aws_lambda_function.inference.arn
   }
 
-  tags = {
-    Project     = var.project_name
-    Environment = var.environment
-  }
+  tags = local.common_tags
 }
 
 resource "aws_lambda_permission" "allow_iot_invoke_lambda" {
@@ -35,7 +32,7 @@ resource "aws_lambda_permission" "allow_iot_invoke_lambda" {
 }
 
 resource "aws_iot_policy" "rapiro_policy" {
-  name = "${var.project_name}-iot-policy"
+  name = local.iot_policy_name
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -53,7 +50,7 @@ resource "aws_iot_policy" "rapiro_policy" {
           "iot:Publish"
         ]
         Resource = [
-          "arn:aws:iot:${var.aws_region}:*:topic/rapiro/lsa/keypoints"
+          "arn:aws:iot:${var.aws_region}:${data.aws_caller_identity.current.account_id}:topic/rapiro/lsa/keypoints"
         ]
       },
       {

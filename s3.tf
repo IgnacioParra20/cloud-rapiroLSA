@@ -1,7 +1,7 @@
 # Bucket privado para modelos entrenados (MLP/LSTM) y datasets como LSA64.
 # Se agrega el Account ID al nombre para cumplir la unicidad global requerida por S3.
 resource "aws_s3_bucket" "model_artifacts" {
-  bucket = "${var.project_name}-models-datasets-${data.aws_caller_identity.current.account_id}"
+  bucket = local.s3_bucket_name
 }
 
 # Bloqueo explícito de acceso público: defensa en profundidad para artefactos de IA y datasets.

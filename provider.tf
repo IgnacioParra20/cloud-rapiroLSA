@@ -1,6 +1,5 @@
 # Proveedor principal de AWS para RAPIRO-LSA.
-# us-east-2 es la region configurada para desplegar esta infraestructura
-# y aplica a la Capa Gratuita de AWS para los recursos definidos aquí.
+# La región se define por variable para soportar despliegues por workspace/región.
 provider "aws" {
   region = var.aws_region
 

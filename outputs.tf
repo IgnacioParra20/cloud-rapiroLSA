@@ -1,3 +1,13 @@
+output "aws_region" {
+  description = "Región AWS activa para este workspace."
+  value       = var.aws_region
+}
+
+output "resource_suffix" {
+  description = "Sufijo aplicado a los recursos de este workspace."
+  value       = var.resource_suffix
+}
+
 output "s3_bucket_name" {
   description = "Nombre del bucket S3 privado para modelos entrenados y datasets."
   value       = aws_s3_bucket.model_artifacts.bucket

@@ -5,7 +5,7 @@ data "archive_file" "lambda_inference" {
 }
 
 resource "aws_lambda_function" "inference" {
-  function_name = "${var.project_name}-inference"
+  function_name = local.lambda_function_name
 
   role    = aws_iam_role.lambda_inference.arn
   handler = "app.handler"
@@ -26,10 +26,7 @@ resource "aws_lambda_function" "inference" {
     }
   }
 
-  tags = {
-    Project     = var.project_name
-    Environment = var.environment
-  }
+  tags = local.common_tags
 }
 
 resource "aws_lambda_function_url" "rapiro_ingest_url" {

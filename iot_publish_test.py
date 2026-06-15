@@ -1,11 +1,12 @@
 import json
+import os
 import time
 from awscrt import mqtt
 from awsiot import mqtt_connection_builder
 
 
-AWS_IOT_ENDPOINT = "a2mndyhmsh25ki-ats.iot.us-east-2.amazonaws.com"
-CLIENT_ID = "rapiro-lsa-python-client"
+AWS_IOT_ENDPOINT = os.environ["AWS_IOT_ENDPOINT"]
+CLIENT_ID = os.environ.get("AWS_IOT_CLIENT_ID", "rapiro-lsa-python-client")
 
 TOPIC = "rapiro/lsa/keypoints"
 
