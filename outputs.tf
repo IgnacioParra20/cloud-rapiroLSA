@@ -40,5 +40,10 @@ output "ec2_backend_public_dns" {
 
 output "ec2_backend_url" {
   description = "URL base HTTP del backend EC2 FastAPI. Null si enable_ec2_backend=false."
-  value       = var.enable_ec2_backend ? "http://${aws_instance.rapiro_backend[0].public_dns}:8000" : null
+  value       = var.enable_ec2_backend ? "http://${aws_instance.rapiro_backend[0].public_ip}:8000" : null
+}
+
+output "ec2_instance_id" {
+  description = "ID de la instancia EC2 backend. Null si enable_ec2_backend=false."
+  value       = var.enable_ec2_backend ? aws_instance.rapiro_backend[0].id : null
 }
