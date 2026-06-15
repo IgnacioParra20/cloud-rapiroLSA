@@ -4,14 +4,16 @@ on:
   pull_request:
     paths:
       - "**/*.tf"
-      - "lambda/**"
+      - "ec2_app/**"
+      - "scripts/test_ec2_backend.py"
       - ".github/workflows/terraform.yml"
   push:
     branches:
       - main
     paths:
       - "**/*.tf"
-      - "lambda/**"
+      - "ec2_app/**"
+      - "scripts/test_ec2_backend.py"
       - ".github/workflows/terraform.yml"
 
 permissions:
@@ -53,5 +55,5 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Compile Python files
-        run: python -m py_compile lambda/app.py iot_publish_test.py
+      - name: Compile EC2 backend Python files
+        run: python -m py_compile ec2_app/main.py scripts/test_ec2_backend.py
