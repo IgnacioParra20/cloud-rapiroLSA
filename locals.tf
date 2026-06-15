@@ -8,11 +8,11 @@ locals {
   lambda_role_name   = "${var.project_name}-lambda-inference-role${local.suffix}"
   lambda_policy_name = "${var.project_name}-lambda-inference-policy${local.suffix}"
 
-  ec2_backend_name           = "${var.project_name}-ec2-backend${local.suffix}"
-  ec2_role_name              = "${var.project_name}-ec2-backend-role${local.suffix}"
-  ec2_policy_name            = "${var.project_name}-ec2-backend-policy${local.suffix}"
-  ec2_instance_profile_name  = "${var.project_name}-ec2-backend-profile${local.suffix}"
-  ec2_security_group_name    = "${var.project_name}-ec2-backend-sg${local.suffix}"
+  ec2_backend_name          = "${var.project_name}-ec2-backend${local.suffix}"
+  ec2_role_name             = "${var.project_name}-ec2-backend-role${local.suffix}"
+  ec2_policy_name           = "${var.project_name}-ec2-backend-policy${local.suffix}"
+  ec2_instance_profile_name = "${var.project_name}-ec2-backend-profile${local.suffix}"
+  ec2_security_group_name   = "${var.project_name}-ec2-backend-sg${local.suffix}"
 
   cloudwatch_log_group_name = "/aws/lambda/${local.lambda_function_name}"
 
