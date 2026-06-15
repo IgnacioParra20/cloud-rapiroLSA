@@ -23,13 +23,16 @@ resource "aws_instance" "rapiro_backend" {
   associate_public_ip_address = true
 
   user_data = templatefile("${path.module}/ec2_user_data.sh", {
-    main_py          = file("${path.module}/ec2_app/main.py")
-    requirements_txt = file("${path.module}/ec2_app/requirements.txt")
-    dynamodb_table   = aws_dynamodb_table.sessions.name
-    s3_bucket        = aws_s3_bucket.model_artifacts.bucket
-    s3_events_prefix = "events/"
-    aws_region       = var.aws_region
-    api_token        = var.api_token
+    main_py                 = file("${path.module}/ec2_app/main.py")
+    requirements_txt        = file("${path.module}/ec2_app/requirements.txt")
+    requirements_vision_txt = file("${path.module}/ec2_app/requirements-vision.txt")
+    ec2_diagnose_sh         = file("${path.module}/scripts/ec2_diagnose.sh")
+    ec2_restart_backend_sh  = file("${path.module}/scripts/ec2_restart_backend.sh")
+    dynamodb_table          = aws_dynamodb_table.sessions.name
+    s3_bucket               = aws_s3_bucket.model_artifacts.bucket
+    s3_events_prefix        = "events/"
+    aws_region              = var.aws_region
+    api_token               = var.api_token
   })
 
   user_data_replace_on_change = true

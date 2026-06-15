@@ -1,57 +1,68 @@
-import argparse
+import json
 import os
-from pathlib import Path
+import sys
+import time
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
-import requests
+
+def require_env(name: str) -> str:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        raise SystemExit(f"ERROR: falta variable de entorno {name}")
+    return value
 
 
-def build_headers(token: str) -> dict[str, str]:
-    return {"x-api-key": token} if token else {}
+def request_json(method: str, url: str, token: str = "", payload: dict[str, Any] | None = None) -> dict[str, Any]:
+    body = json.dumps(payload).encode("utf-8") if payload is not None else None
+    headers = {"Accept": "application/json"}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+    if token:
+        headers["x-api-key"] = token
+
+    req = Request(url, data=body, headers=headers, method=method)
+    try:
+        with urlopen(req, timeout=15) as response:
+            raw = response.read().decode("utf-8")
+            print(f"{method} {url} -> HTTP {response.status}")
+            print(raw)
+            return json.loads(raw) if raw else {}
+    except HTTPError as exc:
+        error_body = exc.read().decode("utf-8", errors="replace")
+        raise SystemExit(f"ERROR HTTP en {method} {url}: {exc.code}\n{error_body}") from exc
+    except URLError as exc:
+        raise SystemExit(f"ERROR de conexión en {method} {url}: {exc.reason}") from exc
+    except TimeoutError as exc:
+        raise SystemExit(f"ERROR timeout en {method} {url}") from exc
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Prueba el backend EC2 FastAPI de RAPIRO-LSA")
-    parser.add_argument("frame", nargs="?", help="Ruta opcional a una imagen JPEG para probar POST /frame")
-    args = parser.parse_args()
+    base_url = require_env("RAPIRO_EC2_BACKEND_URL").rstrip("/")
+    token = os.environ.get("RAPIRO_API_TOKEN", "").strip()
 
-    base_url = os.environ["RAPIRO_EC2_BACKEND_URL"].rstrip("/")
-    token = os.environ.get("RAPIRO_API_TOKEN", "")
-    headers = build_headers(token)
-
-    health_response = requests.get(f"{base_url}/health", timeout=5)
-    print("GET /health:", health_response.status_code, health_response.text)
-    health_response.raise_for_status()
+    health = request_json("GET", f"{base_url}/health")
+    if health.get("status") != "ok" or health.get("service") != "rapiro-lsa-ec2-backend":
+        raise SystemExit(f"ERROR: respuesta inesperada de /health: {health}")
 
     event_payload = {
-        "SessionId": "ec2-manual-test-001",
+        "SessionId": f"ec2-basic-test-{int(time.time())}",
         "DetectedSign": "Hola",
-        "Confidence": 0.93,
-        "DeviceId": "rapiro-lsa-thing-sae1",
+        "Confidence": 0.95,
+        "Source": "PowerShell Test",
+        "DeviceId": "rapiro-lsa-ec2",
         "Mode": "word",
-        "Source": "scripts/test_ec2_backend.py",
-        "Stable": True,
     }
-    event_response = requests.post(f"{base_url}/event", headers=headers, json=event_payload, timeout=10)
-    print("POST /event:", event_response.status_code, event_response.text)
-    event_response.raise_for_status()
+    event = request_json("POST", f"{base_url}/event", token=token, payload=event_payload)
+    if "event" not in event or "s3_path" not in event:
+        raise SystemExit(f"ERROR: respuesta inesperada de /event: {event}")
 
-    if args.frame:
-        frame_path = Path(args.frame)
-        with frame_path.open("rb") as frame_file:
-            frame_response = requests.post(
-                f"{base_url}/frame",
-                headers=headers,
-                data={
-                    "SessionId": "ec2-frame-test-001",
-                    "DeviceId": "rapiro-lsa-thing-sae1",
-                    "Mode": "word",
-                },
-                files={"frame": (frame_path.name, frame_file, "image/jpeg")},
-                timeout=15,
-            )
-        print("POST /frame:", frame_response.status_code, frame_response.text)
-        frame_response.raise_for_status()
+    print("OK: /health y /event respondieron correctamente")
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        sys.exit("Interrumpido por el usuario")

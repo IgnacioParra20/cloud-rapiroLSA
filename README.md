@@ -152,3 +152,88 @@ No ejecutes `terraform apply` automáticamente. Primero verificá región, works
 ## Explicación para defensa
 
 > Se rediseñó el sistema cloud para quitar Lambda del procesamiento principal y eliminar componentes que ya no se usan. RAPIRO envía frames al backend EC2 en São Paulo, donde corre Python con FastAPI, OpenCV, MediaPipe y el modelo de reconocimiento. EC2 devuelve la seña reconocida para que RAPIRO hable localmente, y registra el evento en DynamoDB y S3 usando IAM Instance Profile, sin access keys.
+
+## Troubleshooting EC2 backend
+
+> No ejecutes `terraform apply` durante diagnóstico si solo querés validar el repo. El flujo principal es EC2; Lambda queda como legado/opcional.
+
+### Validación rápida desde PowerShell
+
+```powershell
+$env:AWS_PAGER=""
+
+terraform output
+terraform output -raw ec2_backend_public_ip
+terraform output -raw ec2_backend_url
+
+$EC2_IP=(terraform output -raw ec2_backend_public_ip)
+$env:RAPIRO_EC2_BACKEND_URL="http://${EC2_IP}:8000"
+echo $env:RAPIRO_EC2_BACKEND_URL
+
+Test-NetConnection $EC2_IP -Port 8000
+
+Invoke-RestMethod `
+  -Uri "$env:RAPIRO_EC2_BACKEND_URL/health" `
+  -Method GET
+```
+
+Si PowerShell interpreta mal la URL con `:`, armala explícitamente desde la IP pública:
+
+```powershell
+$EC2_IP=(terraform output -raw ec2_backend_public_ip)
+$env:RAPIRO_EC2_BACKEND_URL="http://${EC2_IP}:8000"
+echo $env:RAPIRO_EC2_BACKEND_URL
+```
+
+### Test básico local de `/health` y `/event`
+
+```powershell
+$env:RAPIRO_EC2_BACKEND_URL=(terraform output -raw ec2_backend_url)
+$env:RAPIRO_API_TOKEN="rapiro-demo-token-2026"
+python scripts/test_ec2_backend.py
+```
+
+El script no necesita imagen ni frame: solo prueba que FastAPI esté vivo y que `/event` registre en DynamoDB/S3.
+
+### Estado de la instancia con AWS CLI
+
+```powershell
+$INSTANCE_ID=(terraform output -raw ec2_instance_id)
+
+aws ec2 describe-instance-status `
+  --instance-ids $INSTANCE_ID `
+  --region sa-east-1 `
+  --include-all-instances `
+  --no-cli-pager `
+  --query "InstanceStatuses[].{InstanceId:InstanceId,State:InstanceState.Name,System:SystemStatus.Status,Instance:InstanceStatus.Status}" `
+  --output table
+```
+
+### Diagnóstico dentro de Session Manager
+
+Al entrar por SSM Session Manager, copiá o ejecutá el script ya instalado por user data:
+
+```bash
+sudo bash /opt/rapiro-lsa/scripts/ec2_diagnose.sh
+```
+
+Comandos manuales equivalentes:
+
+```bash
+cat /etc/os-release
+ps -p 1 -o comm=
+sudo ss -tulpn | grep 8000 || true
+curl -v http://localhost:8000/health || true
+tail -n 100 /opt/rapiro-lsa/backend.log || true
+tail -n 100 /opt/rapiro-lsa/user-data-debug.log || true
+```
+
+### Reparación rápida dentro de EC2
+
+Si el puerto 8000 no escucha o `systemctl` no existe, levantá Uvicorn con el fallback `nohup`:
+
+```bash
+sudo bash /opt/rapiro-lsa/scripts/ec2_restart_backend.sh
+```
+
+Este script mata procesos `uvicorn main:app` anteriores, carga `/opt/rapiro-lsa/backend.env`, inicia FastAPI en `0.0.0.0:8000`, escribe logs en `/opt/rapiro-lsa/backend.log` y verifica `http://localhost:8000/health`.
