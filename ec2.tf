@@ -17,7 +17,7 @@ resource "aws_instance" "rapiro_backend" {
   count = var.enable_ec2_backend ? 1 : 0
 
   ami                         = data.aws_ami.ubuntu_lts.id
-  instance_type               = var.ec2_instance_type
+  instance_type               = local.ec2_instance_type
   iam_instance_profile        = aws_iam_instance_profile.ec2_backend[0].name
   vpc_security_group_ids      = [aws_security_group.ec2_backend[0].id]
   associate_public_ip_address = true

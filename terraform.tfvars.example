@@ -1,0 +1,16 @@
+# Valores seguros de ejemplo para desplegar RAPIRO-LSA en São Paulo.
+# No guardes tokens reales en archivos versionados.
+
+aws_region      = "sa-east-1"
+resource_suffix = "sae1"
+instance_type   = "t3.medium"
+
+# Alternativa compatible con configuraciones antiguas:
+# ec2_instance_type = "t3.medium"
+
+enable_ec2_backend = true
+allowed_ssh_cidr   = ""
+
+# Pasa api_token mediante variable de entorno en vez de commitearlo:
+# PowerShell:   $env:TF_VAR_api_token="TU_TOKEN"
+# Linux/macOS:  export TF_VAR_api_token="TU_TOKEN"

@@ -31,14 +31,21 @@ RAPIRO / Raspberry / Python local
 | Security Group | Puerto `8000` para FastAPI; SSH cerrado salvo configuración explícita. |
 | CloudWatch Agent | Envío básico de logs de la app y bootstrap. |
 
-## Recursos por región
+## Configuración objetivo
 
-| Workspace | Región | Sufijo | EC2 backend | DynamoDB | S3 |
-| --- | --- | --- | --- | --- | --- |
-| `default` | `us-east-2` | vacío | `rapiro-lsa-ec2-backend` | `rapiro-lsa-sessions` | `rapiro-lsa-models-datasets-<account_id>` |
-| `sa-east-1` | `sa-east-1` | `sae1` | `rapiro-lsa-ec2-backend-sae1` | `rapiro-lsa-sessions-sae1` | `rapiro-lsa-models-datasets-<account_id>-sae1` |
+El despliegue esperado del repositorio es **São Paulo (`sa-east-1`)**, instancia EC2 **`t3.medium`** y sufijo de recursos **`sae1`**. Los nombres generados conservan ese sufijo para evitar recreaciones innecesarias:
 
-La región recomendada para Argentina es **São Paulo (`sa-east-1`)** con sufijo `sae1`.
+| Recurso | Nombre esperado |
+| --- | --- |
+| EC2 backend | `rapiro-lsa-ec2-backend-sae1` |
+| Security Group | `rapiro-lsa-ec2-backend-sg-sae1` |
+| IAM Role | `rapiro-lsa-ec2-backend-role-sae1` |
+| IAM Policy | `rapiro-lsa-ec2-backend-policy-sae1` |
+| Instance Profile | `rapiro-lsa-ec2-backend-profile-sae1` |
+| DynamoDB | `rapiro-lsa-sessions-sae1` |
+| S3 | `rapiro-lsa-models-datasets-<account_id>-sae1` |
+
+El provider AWS usa `var.aws_region`; no debe apuntar a otra región cuando se gestionan estos recursos. Esto evita errores de S3 como `PermanentRedirect` al administrar buckets creados en São Paulo desde un endpoint regional incorrecto.
 
 ## Seguridad del endpoint
 
@@ -68,7 +75,7 @@ Ejemplo de respuesta de `/frame`:
 
 ## Desplegar EC2 en São Paulo
 
-Desde PowerShell, en la raíz del repo:
+Desde PowerShell, en la raíz del repo. No subas tokens reales a GitHub; pasá `api_token` como variable de entorno:
 
 ```powershell
 terraform workspace new sa-east-1
@@ -77,9 +84,9 @@ terraform workspace select sa-east-1
 
 $env:TF_VAR_aws_region="sa-east-1"
 $env:TF_VAR_resource_suffix="sae1"
-$env:TF_VAR_api_token="rapiro-demo-token-2026"
+$env:TF_VAR_api_token="TU_TOKEN"
 $env:TF_VAR_enable_ec2_backend="true"
-$env:TF_VAR_ec2_instance_type="t3.micro"
+$env:TF_VAR_instance_type="t3.medium"
 # SSH queda cerrado por defecto. Preferir AWS Systems Manager Session Manager.
 $env:TF_VAR_allowed_ssh_cidr=""
 
@@ -88,7 +95,7 @@ terraform validate
 terraform plan
 ```
 
-Ejecutá `terraform apply` **solo manualmente** después de revisar que el plan no destruya recursos existentes.
+En Linux/macOS, el token se pasa con `export TF_VAR_api_token="TU_TOKEN"`. Ejecutá `terraform apply` **solo manualmente** después de revisar que el plan no destruya recursos existentes. Antes de aplicar, confirmá que el plan conserve `aws_region = "sa-east-1"`, `resource_suffix = "sae1"`, `instance_type = "t3.medium"` y que no quite el sufijo `sae1` de nombres existentes. Si aun así Terraform quiere recrear recursos porque faltan en AWS, tratá eso como posible drift y revisalo antes de aplicar.
 
 ## Probar el backend EC2
 
@@ -125,7 +132,7 @@ El CloudWatch Agent envía `/var/log/rapiro-lsa-backend.log` y `/var/log/rapiro-
 
 ## Costos y apagado
 
-> **Importante:** EC2 queda encendido. Si no se está usando la demo, detener o destruir la instancia EC2 para evitar costos.
+> **Importante:** EC2 queda encendido. `t3.medium` cuesta más que `t3.micro`; si no se está usando la demo, detener o destruir la instancia EC2 para evitar costos.
 
 Opciones:
 

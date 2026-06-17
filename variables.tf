@@ -7,7 +7,7 @@ variable "project_name" {
 variable "aws_region" {
   description = "AWS region donde se desplegará la infraestructura"
   type        = string
-  default     = "us-east-2"
+  default     = "sa-east-1"
 }
 
 variable "environment" {
@@ -19,7 +19,13 @@ variable "environment" {
 variable "resource_suffix" {
   description = "Sufijo opcional para diferenciar recursos por región o entorno"
   type        = string
-  default     = ""
+  default     = "sae1"
+}
+
+variable "instance_type" {
+  description = "Tipo de instancia EC2 para backend RAPIRO-LSA. Nombre preferido para nuevas configuraciones."
+  type        = string
+  default     = "t3.medium"
 }
 
 variable "api_token" {
@@ -29,9 +35,10 @@ variable "api_token" {
 }
 
 variable "ec2_instance_type" {
-  description = "Tipo de instancia EC2 para backend RAPIRO-LSA"
+  description = "Compatibilidad hacia atrás: tipo de instancia EC2. Si se define, sobrescribe instance_type."
   type        = string
-  default     = "t3.medium"
+  default     = null
+  nullable    = true
 }
 
 variable "enable_ec2_backend" {
