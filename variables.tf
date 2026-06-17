@@ -45,3 +45,21 @@ variable "allowed_ssh_cidr" {
   type        = string
   default     = ""
 }
+
+variable "enable_cloudwatch_monitoring" {
+  description = "Habilita dashboard y alarmas de CloudWatch sin modificar el user data ni recrear la EC2."
+  type        = bool
+  default     = true
+}
+
+variable "monitoring_cpu_high_threshold" {
+  description = "Porcentaje de CPU promedio para disparar la alarma de CPU alta del backend EC2."
+  type        = number
+  default     = 80
+}
+
+variable "monitoring_alarm_email" {
+  description = "Email opcional para recibir alertas por SNS. Vacío crea alarmas sin notificación por email."
+  type        = string
+  default     = ""
+}

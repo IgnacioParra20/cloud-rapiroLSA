@@ -47,3 +47,13 @@ output "ec2_instance_id" {
   description = "ID de la instancia EC2 backend. Null si enable_ec2_backend=false."
   value       = var.enable_ec2_backend ? aws_instance.rapiro_backend[0].id : null
 }
+
+output "cloudwatch_dashboard_name" {
+  description = "Nombre del dashboard CloudWatch del backend EC2. Null si el monitoreo está deshabilitado."
+  value       = var.enable_ec2_backend && var.enable_cloudwatch_monitoring ? aws_cloudwatch_dashboard.backend_monitoring[0].dashboard_name : null
+}
+
+output "cloudwatch_dashboard_url" {
+  description = "URL directa al dashboard CloudWatch del backend EC2. Null si el monitoreo está deshabilitado."
+  value       = var.enable_ec2_backend && var.enable_cloudwatch_monitoring ? "https://${var.aws_region}.console.aws.amazon.com/cloudwatch/home?region=${var.aws_region}#dashboards:name=${aws_cloudwatch_dashboard.backend_monitoring[0].dashboard_name}" : null
+}

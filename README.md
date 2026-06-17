@@ -123,6 +123,42 @@ sudo journalctl -u rapiro-lsa-backend.service -f
 
 El CloudWatch Agent envía `/var/log/rapiro-lsa-backend.log` y `/var/log/rapiro-lsa-user-data.log` al log group `/rapiro-lsa/ec2-backend/<region>`.
 
+
+## Monitoreo con CloudWatch sin tocar EC2
+
+El repositorio incluye un dashboard y alarmas de CloudWatch definidos en Terraform que observan la instancia existente sin modificar `user_data`, scripts de arranque ni configuración interna de EC2. Esto evita reemplazar la instancia por cambios de monitoreo y mantiene el flujo RAPIRO -> EC2 -> DynamoDB/S3.
+
+Recursos agregados por Terraform:
+
+* Dashboard `rapiro-lsa-monitoring<suffix>` con CPU, status checks, red y una consulta de errores de logs.
+* Alarma de CPU alta configurable con `monitoring_cpu_high_threshold`.
+* Alarma de `StatusCheckFailed` para detectar problemas de la instancia o del host AWS.
+* SNS opcional si se define `monitoring_alarm_email`; si queda vacío, las alarmas se crean sin envío de email.
+
+Variables opcionales:
+
+```powershell
+$env:TF_VAR_enable_cloudwatch_monitoring="true"
+$env:TF_VAR_monitoring_cpu_high_threshold="80"
+# Opcional: al aplicar, AWS enviará un email de confirmación de suscripción SNS.
+$env:TF_VAR_monitoring_alarm_email="tu-email@example.com"
+```
+
+Comandos recomendados para validar antes de aplicar:
+
+```powershell
+terraform fmt
+terraform validate
+terraform plan -out tfplan
+```
+
+Aplicar solo después de revisar que el plan agregue recursos CloudWatch/SNS y no muestre reemplazo de `aws_instance.rapiro_backend`:
+
+```powershell
+terraform apply tfplan
+terraform output cloudwatch_dashboard_url
+```
+
 ## Costos y apagado
 
 > **Importante:** EC2 queda encendido. Si no se está usando la demo, detener o destruir la instancia EC2 para evitar costos.
