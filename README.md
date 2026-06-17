@@ -35,10 +35,10 @@ RAPIRO / Raspberry / Python local
 
 | Workspace | Región | Sufijo | EC2 backend | DynamoDB | S3 |
 | --- | --- | --- | --- | --- | --- |
-| `default` | `us-east-2` | vacío | `rapiro-lsa-ec2-backend` | `rapiro-lsa-sessions` | `rapiro-lsa-models-datasets-<account_id>` |
-| `sa-east-1` | `sa-east-1` | `sae1` | `rapiro-lsa-ec2-backend-sae1` | `rapiro-lsa-sessions-sae1` | `rapiro-lsa-models-datasets-<account_id>-sae1` |
+| `default` | `sa-east-1` | `sae1` | `rapiro-lsa-ec2-backend-sae1` | `rapiro-lsa-sessions-sae1` | `rapiro-lsa-models-datasets-<account_id>-sae1` |
+| `us-east-2` opcional | `us-east-2` | vacío u otro sufijo único | `rapiro-lsa-ec2-backend` | `rapiro-lsa-sessions` | `rapiro-lsa-models-datasets-<account_id>` |
 
-La región recomendada para Argentina es **São Paulo (`sa-east-1`)** con sufijo `sae1`.
+La región recomendada para Argentina es **São Paulo (`sa-east-1`)** con sufijo `sae1`, y esos son los valores por defecto del repo para evitar planes accidentales que migren recursos existentes a otra región.
 
 ## Seguridad del endpoint
 

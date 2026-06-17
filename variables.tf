@@ -5,9 +5,9 @@ variable "project_name" {
 }
 
 variable "aws_region" {
-  description = "AWS region donde se desplegará la infraestructura"
+  description = "AWS region donde se desplegará la infraestructura. Por defecto usa São Paulo para coincidir con el estado actual."
   type        = string
-  default     = "us-east-2"
+  default     = "sa-east-1"
 }
 
 variable "environment" {
@@ -17,9 +17,9 @@ variable "environment" {
 }
 
 variable "resource_suffix" {
-  description = "Sufijo opcional para diferenciar recursos por región o entorno"
+  description = "Sufijo opcional para diferenciar recursos por región o entorno. Por defecto coincide con sa-east-1."
   type        = string
-  default     = ""
+  default     = "sae1"
 }
 
 variable "api_token" {
