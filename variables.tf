@@ -31,7 +31,7 @@ variable "api_token" {
 variable "ec2_instance_type" {
   description = "Tipo de instancia EC2 para backend RAPIRO-LSA"
   type        = string
-  default     = "t3.micro"
+  default     = "t3.medium"
 }
 
 variable "enable_ec2_backend" {
