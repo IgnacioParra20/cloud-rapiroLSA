@@ -1,6 +1,6 @@
 locals {
-  suffix             = var.resource_suffix == "" ? "" : "-${var.resource_suffix}"
-  ec2_instance_type  = coalesce(var.ec2_instance_type, var.instance_type)
+  suffix            = var.resource_suffix == "" ? "" : "-${var.resource_suffix}"
+  ec2_instance_type = coalesce(var.ec2_instance_type, var.instance_type)
 
   s3_bucket_name      = "${var.project_name}-models-datasets-${data.aws_caller_identity.current.account_id}${local.suffix}"
   dynamodb_table_name = "${var.project_name}-sessions${local.suffix}"
