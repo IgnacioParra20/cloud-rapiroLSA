@@ -45,3 +45,33 @@ variable "allowed_ssh_cidr" {
   type        = string
   default     = ""
 }
+
+variable "cloudwatch_alarm_email" {
+  description = "Email opcional para recibir notificaciones de alarmas CloudWatch mediante SNS. Vacío deshabilita notificaciones."
+  type        = string
+  default     = ""
+}
+
+variable "cloudwatch_cpu_alarm_threshold" {
+  description = "Porcentaje de CPU promedio que dispara la alarma de CPU alta."
+  type        = number
+  default     = 80
+}
+
+variable "cloudwatch_memory_alarm_threshold" {
+  description = "Porcentaje de memoria usada que dispara la alarma de memoria alta reportada por CloudWatch Agent."
+  type        = number
+  default     = 85
+}
+
+variable "cloudwatch_disk_alarm_threshold" {
+  description = "Porcentaje de disco usado que dispara la alarma de disco alto reportada por CloudWatch Agent."
+  type        = number
+  default     = 85
+}
+
+variable "cloudwatch_backend_error_alarm_threshold" {
+  description = "Cantidad de errores de backend en un periodo de 5 minutos que dispara la alarma."
+  type        = number
+  default     = 1
+}

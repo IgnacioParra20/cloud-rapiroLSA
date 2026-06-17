@@ -47,3 +47,13 @@ output "ec2_instance_id" {
   description = "ID de la instancia EC2 backend. Null si enable_ec2_backend=false."
   value       = var.enable_ec2_backend ? aws_instance.rapiro_backend[0].id : null
 }
+
+output "cloudwatch_log_group_name" {
+  description = "Log group CloudWatch donde llegan los logs del backend EC2. Null si enable_ec2_backend=false."
+  value       = var.enable_ec2_backend ? aws_cloudwatch_log_group.ec2_backend[0].name : null
+}
+
+output "cloudwatch_dashboard_name" {
+  description = "Nombre del dashboard CloudWatch del backend EC2. Null si enable_ec2_backend=false."
+  value       = var.enable_ec2_backend ? aws_cloudwatch_dashboard.rapiro_backend[0].dashboard_name : null
+}

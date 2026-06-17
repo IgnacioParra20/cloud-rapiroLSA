@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -29,16 +30,48 @@ S3_BUCKET = os.environ.get("S3_BUCKET", "")
 S3_EVENTS_PREFIX = os.environ.get("S3_EVENTS_PREFIX", "events/")
 AWS_REGION = os.environ.get("AWS_REGION", "sa-east-1")
 API_TOKEN = os.environ.get("API_TOKEN", "")
+INSTANCE_ID = os.environ.get("INSTANCE_ID", "unknown")
 STABILITY_WINDOW = int(os.environ.get("STABILITY_WINDOW", "3"))
 STABILITY_MIN_CONFIDENCE = float(os.environ.get("STABILITY_MIN_CONFIDENCE", "0.85"))
 
 logging.basicConfig(
     level=os.environ.get("LOG_LEVEL", "INFO"),
-    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    format="%(message)s",
 )
 logger = logging.getLogger(SERVICE_NAME)
 
+
+def emit_log(level: str, event: str, message: str, **fields: Any) -> None:
+    log_payload = {
+        "timestamp": int(time.time()),
+        "level": level.upper(),
+        "service": SERVICE_NAME,
+        "instance_id": INSTANCE_ID,
+        "event": event,
+        "message": message,
+        **fields,
+    }
+    logger.log(getattr(logging, level.upper()), json.dumps(log_payload, ensure_ascii=False, default=str))
+
 app = FastAPI(title="RAPIRO-LSA EC2 Backend", version="1.0.0")
+
+
+async def emit_heartbeat() -> None:
+    while True:
+        emit_log(
+            "info",
+            "backend_heartbeat",
+            "Backend heartbeat",
+            mediapipe_available=MEDIAPIPE_AVAILABLE,
+            dynamodb_configured=bool(DYNAMODB_TABLE),
+            s3_configured=bool(S3_BUCKET),
+        )
+        await asyncio.sleep(60)
+
+
+@app.on_event("startup")
+async def start_heartbeat() -> None:
+    asyncio.create_task(emit_heartbeat())
 
 dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION) if DYNAMODB_TABLE else None
 table = dynamodb.Table(DYNAMODB_TABLE) if dynamodb else None
@@ -54,7 +87,12 @@ if MEDIAPIPE_AVAILABLE:
     )
 else:
     hands = None
-    logger.warning("MediaPipe unavailable; /frame will use mock recognition: %s", MEDIAPIPE_IMPORT_ERROR)
+    emit_log(
+        "warning",
+        "mediapipe_unavailable",
+        "MediaPipe unavailable; /frame will use mock recognition",
+        error=MEDIAPIPE_IMPORT_ERROR,
+    )
 
 session_predictions: dict[str, deque[str]] = defaultdict(lambda: deque(maxlen=STABILITY_WINDOW))
 last_registered: dict[str, tuple[str, int]] = {}
@@ -81,7 +119,7 @@ class RecognitionResponse(BaseModel):
 
 def require_api_key(x_api_key: str | None = Header(default=None)) -> None:
     if API_TOKEN and x_api_key != API_TOKEN:
-        logger.warning("Request rejected because x-api-key is invalid or missing")
+        emit_log("warning", "request_rejected", "Request rejected because x-api-key is invalid or missing")
         raise HTTPException(status_code=401, detail="Token inválido")
 
 
@@ -149,15 +187,36 @@ def register_event(event: dict[str, Any]) -> str:
     if table is None or s3 is None:
         raise HTTPException(status_code=500, detail="DYNAMODB_TABLE y S3_BUCKET deben estar configurados")
 
-    table.put_item(Item=decimalize(event))
-    s3_key = f"{S3_EVENTS_PREFIX}{event['SessionId']}-{event['Timestamp']}.json"
-    s3.put_object(
-        Bucket=S3_BUCKET,
-        Key=s3_key,
-        Body=json.dumps(event, ensure_ascii=False).encode("utf-8"),
-        ContentType="application/json",
+    try:
+        table.put_item(Item=decimalize(event))
+        s3_key = f"{S3_EVENTS_PREFIX}{event['SessionId']}-{event['Timestamp']}.json"
+        s3.put_object(
+            Bucket=S3_BUCKET,
+            Key=s3_key,
+            Body=json.dumps(event, ensure_ascii=False).encode("utf-8"),
+            ContentType="application/json",
+        )
+    except Exception as exc:
+        emit_log(
+            "error",
+            "event_registration_failed",
+            "Failed to register event in DynamoDB or S3",
+            session_id=event.get("SessionId"),
+            detected_sign=event.get("DetectedSign"),
+            error=str(exc),
+        )
+        raise
+
+    emit_log(
+        "info",
+        "event_registered",
+        "Registered event in DynamoDB and S3",
+        session_id=event["SessionId"],
+        detected_sign=event.get("DetectedSign"),
+        confidence=event.get("Confidence"),
+        stable=event.get("Stable"),
+        s3_path=f"s3://{S3_BUCKET}/{s3_key}",
     )
-    logger.info("Registered event in DynamoDB and s3://%s/%s", S3_BUCKET, s3_key)
     return f"s3://{S3_BUCKET}/{s3_key}"
 
 
@@ -208,15 +267,18 @@ async def frame(
             }
         )
 
-    logger.info(
-        "Frame processed session=%s device=%s sign=%s confidence=%.2f stable=%s keypoints=%s mediapipe=%s",
-        SessionId,
-        DeviceId,
-        detected_sign,
-        confidence,
-        stable,
-        len(keypoints),
-        MEDIAPIPE_AVAILABLE,
+    emit_log(
+        "info",
+        "frame_processed",
+        "Frame processed",
+        session_id=SessionId,
+        device_id=DeviceId,
+        mode=Mode,
+        detected_sign=detected_sign,
+        confidence=confidence,
+        stable=stable,
+        keypoints_count=len(keypoints),
+        mediapipe_available=MEDIAPIPE_AVAILABLE,
     )
     return RecognitionResponse(
         SessionId=SessionId,

@@ -34,6 +34,8 @@ ${ec2_restart_backend_sh}
 RESTART
 chmod +x "$${APP_DIR}/scripts/ec2_diagnose.sh" "$${APP_DIR}/scripts/ec2_restart_backend.sh"
 
+INSTANCE_ID=$(curl -fsS -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" | xargs -I{} curl -fsS -H "X-aws-ec2-metadata-token: {}" http://169.254.169.254/latest/meta-data/instance-id || echo "unknown")
+
 cat > "$${APP_DIR}/backend.env" <<'ENVAPP'
 DYNAMODB_TABLE=${dynamodb_table}
 S3_BUCKET=${s3_bucket}
@@ -41,6 +43,7 @@ S3_EVENTS_PREFIX=${s3_events_prefix}
 AWS_REGION=${aws_region}
 API_TOKEN=${api_token}
 ENVAPP
+echo "INSTANCE_ID=$${INSTANCE_ID}" >> "$${APP_DIR}/backend.env"
 chmod 600 "$${APP_DIR}/backend.env"
 
 python3 -m venv "$${APP_DIR}/venv"
@@ -90,6 +93,44 @@ fi
   mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
   cat > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json <<'CWCONFIG'
 {
+  "agent": {
+    "metrics_collection_interval": 60
+  },
+  "metrics": {
+    "namespace": "CWAgent",
+    "append_dimensions": {
+      "InstanceId": "$${aws:InstanceId}"
+    },
+    "aggregation_dimensions": [
+      ["InstanceId"]
+    ],
+    "metrics_collected": {
+      "cpu": {
+        "measurement": [
+          "cpu_usage_idle",
+          "cpu_usage_user",
+          "cpu_usage_system"
+        ],
+        "metrics_collection_interval": 60,
+        "totalcpu": true
+      },
+      "disk": {
+        "measurement": [
+          "used_percent"
+        ],
+        "metrics_collection_interval": 60,
+        "resources": [
+          "/"
+        ]
+      },
+      "mem": {
+        "measurement": [
+          "mem_used_percent"
+        ],
+        "metrics_collection_interval": 60
+      }
+    }
+  },
   "logs": {
     "logs_collected": {
       "files": {
